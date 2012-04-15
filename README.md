@@ -6,9 +6,18 @@ It can also optionally reside under its own URL (bundle prefix set by **handles*
 
 **TextPub** is used as a backend to serve [Laravel.ru](http://laravel.ru) documentation, articles and several standalone pages.
 
+[ [Bundle homepage](http://bundles.laravel.com/bundle/textpub) | [Russian](http://laravel.ru/bundles/textpub) ]
+
 ## Installation
-Put this into your **application/bundles.php**:
-<pre>
+At first, fetch it with **Artisan**:
+
+```
+php artisan bundle:install textpub
+```
+
+Then put this into your **application/bundles.php**:
+
+```PHP
 'textpub' => array(
   'handles' => 'text',
 
@@ -16,7 +25,7 @@ Put this into your **application/bundles.php**:
     'map' => array('TextPub' => '(:bundle)/api.php')
   )
 )
-</pre>
+```
 
 > Depending on your configuration (see below) you can also set **auto** and remove **handles**. However, the autoloader option should always be present.
 
