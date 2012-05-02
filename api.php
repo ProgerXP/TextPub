@@ -81,6 +81,7 @@ class TextPub {
       ) + $path;
 
       Route::get($path['root'], $path);
+
       if (empty( $path['single'] )) {
         Route::any($path['root'].'/(:all)', $path);
       }
@@ -140,14 +141,16 @@ class TextPub {
 
     $content = static::get($page, $info);
 
-    if (isset($content)) {
+    if (!isset($content)) {
+      return false;
+    } elseif ($content instanceof Laravel\Response) {
+      return $content;
+    } else {
       if (!empty($info['debug'])) {
         static::log("is serving page [$page] on [$info[url]].", 'debug');
       }
 
       return static::render($content, $info);
-    } else {
-      return false;
     }
   }
 
@@ -159,7 +162,9 @@ class TextPub {
     $page404 = static::option('404', '_404');
     $response = null;
 
-    if ($page404 !== false) {
+    if (is_callable($page404)) {
+      $response = call_user_func($page404, $info, $page);
+    } elseif ($page404 !== false) {
       $info['cache'] = false;
       $parts = explode('/', str_replace('\\', '/', $page));
 
@@ -168,12 +173,12 @@ class TextPub {
         $error = join(DS, $parts).DS.$page404;
         $response = static::serve($info, $error);
       } while ($parts and !$response);
-    }
 
-    if ($response) {
-      $response = static::format_404($response, $info, $page, $error);
-    } else {
-      $response = Response::error(404);
+      if ($response) {
+        $response = static::format_404($response, $info, $page, $error);
+      } else {
+        $response = Response::error(404);
+      }
     }
 
     return $response;
@@ -253,12 +258,14 @@ class TextPub {
    * Returns formatted version of $page belonging to configuration $info or NULL
    * if it doesn't exist. If configured, current cache driver will be used to
    * store and quickly retrieve formatted pages on subsequent requests.
-   * Sets $info['file'] to the full path to the text page file or to NULL on 404.
+   *
+   * Sets $info['file'] to the full path to the text page file or to NULL on 404;
+   * sets $info['base'] to the base directory with trailing directory separator.
    */
   static function get($page, array &$info) {
     $id = static::lang()."@$info[url]>$page";
-    $file = static::find($page, $info['path'], $info['ext']);
-    $info += compact('file');
+    @list($file, $base) = static::find($page, $info['path'], $info['ext']);
+    $info += compact('file', 'base');
 
     $cache = $info['cache'];
 
@@ -275,7 +282,12 @@ class TextPub {
       list($gen_time, $content) = $cache ? static::cache($id) : array(0, '');
 
       if (static::expires($file, $gen_time)) {
-        $formatter = array_get($info['ext'], File::extension($file), $info['formatter']);
+        $formatter = array_get($info['ext'], File::extension($file));
+        // not passing $info['formatter'] as $default parameter for array_get()
+        // because the latter calls value() on it and if the formatter is a closure
+        // it will be called - which is not intended.
+        isset($formatter) or $formatter = $info['formatter'];
+
         $content = static::format(File::get($file), $info, $formatter);
 
         isset($content) and static::cache($id, $content, $cache);
@@ -295,12 +307,11 @@ class TextPub {
    * and of one of the allowed $extensions. Returns NULL if none was found.
    */
   static function find($page, $path, $extensions) {
-    $page = rtrim($path, '\\/').DS.trim($page, '\\/');
-    $files = static::files_of($page, $extensions);
+    $files = static::files_of($page, $path, $extensions);
 
-    foreach ($files as &$file) {
+    foreach ($files as $base => &$file) {
       if ($file = static::file_of($file, $extensions)) {
-        return $file;
+        return array($file, $base);
       }
     }
   }
@@ -312,21 +323,25 @@ class TextPub {
    * for example, .html can be placed in public/*.html while .md - in
    * storage/*.md.
    */
-  static function files_of($page, $extensions) {
+  static function files_of($page, $path, $extensions) {
     $page = rtrim($page, '\\/');
+    $path = rtrim($path, '\\/').DS;
 
     $files = array();
 
-    if (static::is_relative($page)) {
-      $root = Bundle::path('textpub');
+    if (static::is_relative($path)) {
+      $locations = array('languages'.DS.static::lang(),
+                         'storage'.DS.static::lang(),
+                         'storage',
+                         'public'.DS.static::lang(),
+                         'public');
 
-      $files[] = $root.'languages'.DS.static::lang().DS.$page;
-      $files[] = $root.'storage'.DS.static::lang().DS.$page;
-      $files[] = $root.'storage'.DS.$page;
-      $files[] = $root.'public'.DS.static::lang().DS.$page;
-      $files[] = $root.'public'.DS.$page;
+      foreach ($locations as $base) {
+        $base = Bundle::path('textpub').$base.DS;
+        $files[$base] = rtrim($base.$path.$page, '\\/');
+      }
     } else {
-      $files[] = static::format_path($page);
+      $files[$path] = static::format_path($path).$page;
     }
 
     return $files;
@@ -450,7 +465,7 @@ class TextPub {
    */
   static function render($content, array $info) {
     $content = static::norm_rendered($content);
-    $layout = array_get($info, 'layout', 'text');
+    $layout = array_get($info, 'layout', 'textpub::text');
 
     if (is_string($layout)) {
       return View::make($layout)->with($content);

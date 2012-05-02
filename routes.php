@@ -6,4 +6,4 @@ if (!$paths) {
                       " 'handles' options but none are set.");
 }
 
-TextPub::register(Router::$bundle ? '(:bundle)/' : '', $paths);
+TextPub::register('', $paths);

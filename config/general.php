@@ -74,7 +74,10 @@ return array(
 
   /*
    * Name of the page shown when TextPub cannot locate requested page. Can be
-   * FALSE to show system 404 page or a string - page name to search.
+   * FALSE to show system 404 page, a string - page name to search or a callable
+   * function (array $info, $req_page) that returns a regular Laravel response
+   * (View, Response, string, etc.).
+   *
    * For example, if http://site.ru/path/sub/page is requested and not found
    * and this option has value '_404" the following locations are attempted:
    *   - /TEXTPUB_ROOT/path/sub/_404
@@ -151,7 +154,7 @@ return array(
    * 'handles'). This is also most performance-aware setup because this bundle
    * will only be started upon request.
    *
-   * Note that you must set either 'handles' or 'paths' or an exception is thrown.
+   * Note that you must set either 'handles', 'paths' or both or an error occurs.
    *
    * This array is a set of 'url[/path...]' => <value> pairs where key
    * corresponds to the URL to be served (prefixed with 'handles' automatically
