@@ -143,8 +143,6 @@ class TextPub {
 
     if (!isset($content)) {
       return false;
-    } elseif ($content instanceof Laravel\Response) {
-      return $content;
     } else {
       if (!empty($info['debug'])) {
         static::log("is serving page [$page] on [$info[url]].", 'debug');
@@ -164,6 +162,10 @@ class TextPub {
 
     if (is_callable($page404)) {
       $response = call_user_func($page404, $info, $page);
+
+      if (is_array($response)) {
+        $response = static::render($response, $info + static::options());
+      }
     } elseif ($page404 !== false) {
       $info['cache'] = false;
       $parts = explode('/', str_replace('\\', '/', $page));
@@ -174,11 +176,11 @@ class TextPub {
         $response = static::serve($info, $error);
       } while ($parts and !$response);
 
-      if ($response) {
-        $response = static::format_404($response, $info, $page, $error);
-      } else {
-        $response = Response::error(404);
-      }
+      $response and $response = static::format_404($response, $info, $page, $error);
+    }
+
+    if (!isset($response) or $response === false) {
+      $response = Response::error(404);
     }
 
     return $response;
@@ -325,7 +327,9 @@ class TextPub {
    */
   static function files_of($page, $path, $extensions) {
     $page = rtrim($page, '\\/');
-    $path = rtrim($path, '\\/').DS;
+
+    $path = rtrim($path, '\\/');
+    $path === '' or $path .= DS;
 
     $files = array();
 
@@ -464,19 +468,23 @@ class TextPub {
    * its configuration ($info). Returns a string or an object (like View).
    */
   static function render($content, array $info) {
-    $content = static::norm_rendered($content);
-    $layout = array_get($info, 'layout', 'textpub::text');
-
-    if (is_string($layout)) {
-      return View::make($layout)->with($content);
-    } elseif (is_callable($layout)) {
-      return call_user_func($layout, $content, $info);
-    } elseif ($layout instanceof View) {
-      return $layout->with($content);
-    } elseif (method_exists($layout, 'render')) {
-      return $layout->render($content);
+    if ($content instanceof Laravel\Response) {
+      return $content;
     } else {
-      throw new Exception("Text Publisher: invalid 'layout' value for $info[url].");
+      $content = static::norm_rendered($content);
+      $layout = array_get($info, 'layout', 'textpub::text');
+
+      if (is_string($layout)) {
+        return View::make($layout)->with($content);
+      } elseif (is_callable($layout)) {
+        return call_user_func($layout, $content, $info);
+      } elseif ($layout instanceof View) {
+        return $layout->with($content);
+      } elseif (method_exists($layout, 'render')) {
+        return $layout->render($content);
+      } else {
+        throw new Exception("Text Publisher: invalid 'layout' value for $info[url].");
+      }
     }
   }
 
