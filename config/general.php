@@ -131,7 +131,7 @@ return array(
   /*
    * Instructs TextPub to register named routes when registering text pages in
    * the Router. If TRUE, will convert page's URL into a name using Str::slug('_');
-   * if FALSE will use unnabled routes; if string - will register under that name.
+   * if FALSE will use unnamed routes; if string - will register under that name.
    *
    * This option is particularly useful when overriden on per-path basis.
    */

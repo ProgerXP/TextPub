@@ -1,9 +1,11 @@
 <?php
 
-$paths = TextPub::option('paths') ?: Bundle::option($bundle, 'handles');
-if (!$paths) {
-  throw new Exception("Text Publisher ($bundle) requires 'paths' or/and".
-                      " 'handles' options but none are set.");
-}
+if (Bundle::option('textpub', 'auto')) {
+  $paths = TextPub::option('paths') ?: Bundle::option('textpub', 'handles');
+  if (!$paths) {
+    throw new Exception("Text Publisher (textpub) requires 'paths' or/and".
+                        " 'handles' options but none are set.");
+  }
 
-TextPub::register('', $paths);
+  TextPub::register(''.Router::$bundle, $paths);
+}
