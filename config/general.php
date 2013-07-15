@@ -140,6 +140,9 @@ return array(
   // specifies whether a single document or a directory resides on the page 'path'.
   'single' => false,
 
+  // specifies whether a single document or a directory resides on the page 'path'.
+  'redirToSlash' => true,
+
   /*
    +--------------------------------------------------------------------------
    | Paths Configuration

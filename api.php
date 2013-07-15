@@ -46,7 +46,7 @@ class TextPub {
 
       if (!isset($info['single'])) {
         $merged = $info + static::options();
-        $info['single'] = (bool) static::find('', $info['path'], $merged['ext']);
+        $info['single'] = is_array(static::find('', $info['path'], $merged['ext']));
       }
 
       $norm[] = $info + compact('url');
@@ -75,9 +75,17 @@ class TextPub {
 
       $path = array(
         'root'      => $root.$path['url'],
-        'callback'  => function ($page = null) use ($self, $key) {
-                         return $self::serve_by($key, $page);
-                       },
+        'callback'  =>
+          function ($page = null) use ($self, $key) {
+            $request = strtok(array_get($_SERVER, 'REQUEST_URI'), '?');
+
+            if ("$page" !== '' and substr($request, -1) === '/') {
+              // forces check for directory index in serve().
+              $page .= '/';
+            }
+
+            return $self::serve_by($key, $page);
+          },
       ) + $path;
 
       Route::get($path['root'], $path);
@@ -111,7 +119,7 @@ class TextPub {
     $info = array_get(static::$paths, $key);
     if (!$info) {
       static::log("could not find path [$key] - returning 404.");
-      return Response::error(404);
+      return Event::until(404);
     } else {
       $response = static::serve($info, $page);
 
@@ -134,7 +142,10 @@ class TextPub {
 
     if (empty($info['single'])) {
       isset($page) or $page = static::page_by( array_get($info, 'root') );
-      "$page" === '' and $page = array_get($info, 'index', 'index');
+
+      if ("$page" === '' or substr($page, -1) === '/') {
+        $page .= array_get($info, 'index', 'index');
+      }
     } else {
       $page = '';
     }
@@ -167,7 +178,7 @@ class TextPub {
         $response = static::render($response, $info + static::options());
       }
     } elseif ($page404 !== false) {
-      $info['cache'] = false;
+      $info = array('cache' => false, 'page_404' => $page) + $info;
       $parts = explode('/', str_replace('\\', '/', $page));
 
       do {
@@ -180,7 +191,7 @@ class TextPub {
     }
 
     if (!isset($response) or $response === false) {
-      $response = Response::error(404);
+      $response = Event::until(404);
     }
 
     return $response;
@@ -196,6 +207,10 @@ class TextPub {
       '%404_PAGE%'      => $page,
       '%404_REFERRER%'  => Request::referrer(),
     );
+
+    foreach ($replaces as $key => $value) {
+      $replaces[ substr($key, 0, -1).'Q%' ] = HTML::entities($value);
+    }
 
     $replaces = array_map('e', $replaces);
     return strtr((string) $str, $replaces);
@@ -266,10 +281,23 @@ class TextPub {
    */
   static function get($page, array &$info) {
     $id = static::lang()."@$info[url]>$page";
-    $index = array_get($info, 'index', 'index');
-    @list($file, $base) = static::find($page, $info['path'], $info['ext'], $index);
-    $info += compact('file', 'base');
+    $found = static::find($page, $info['path'], $info['ext']);
 
+    if (is_array($found)) {
+      list($file, $base) = $found;
+    } elseif ($found === true) {
+      if (empty($info['redirToSlash'])) {
+        $index = array_get($info, 'index', 'index');
+        @list($file, $base) = static::find($page.DS.$index, $info['path'], $info['ext']);
+      } else {
+        $query = $_GET ? '?'.http_build_query($_GET) : '';
+        return Redirect::to("$info[root]/$page/$query", 301);
+      }
+    } else {
+      $file = $base = null;
+    }
+
+    $info += compact('file', 'base');
     $cache = $info['cache'];
 
     if (is_array($cache)) {
@@ -309,12 +337,12 @@ class TextPub {
    * Returns the full path to page $page residing under base directory $path
    * and of one of the allowed $extensions. Returns NULL if none was found.
    */
-  static function find($page, $path, $extensions, $index = null) {
+  static function find($page, $path, $extensions) {
     $files = static::files_of($page, $path, $extensions);
 
     foreach ($files as $base => &$file) {
-      if (isset($index) and is_dir($file)) {
-        return static::find($page.DS.$index, $path, $extensions);
+      if (is_dir($file)) {
+        return true;
       } elseif ($file = static::file_of($file, $extensions)) {
         return array($file, $base);
       }
@@ -418,7 +446,7 @@ class TextPub {
 
         ob_start();
         eval("?>$str");
-        $str = array('content' => ob_get_clean()) + $vars;
+        $str = $vars + array('content' => ob_get_clean());
       } elseif (is_string($formatter)) {
         $type = trim(strtok($formatter, ':'));
         $class = trim(strtok('->'));
