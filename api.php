@@ -266,7 +266,8 @@ class TextPub {
    */
   static function get($page, array &$info) {
     $id = static::lang()."@$info[url]>$page";
-    @list($file, $base) = static::find($page, $info['path'], $info['ext']);
+    $index = array_get($info, 'index', 'index');
+    @list($file, $base) = static::find($page, $info['path'], $info['ext'], $index);
     $info += compact('file', 'base');
 
     $cache = $info['cache'];
@@ -308,11 +309,13 @@ class TextPub {
    * Returns the full path to page $page residing under base directory $path
    * and of one of the allowed $extensions. Returns NULL if none was found.
    */
-  static function find($page, $path, $extensions) {
+  static function find($page, $path, $extensions, $index = null) {
     $files = static::files_of($page, $path, $extensions);
 
     foreach ($files as $base => &$file) {
-      if ($file = static::file_of($file, $extensions)) {
+      if (isset($index) and is_dir($file)) {
+        return static::find($page.DS.$index, $path, $extensions);
+      } elseif ($file = static::file_of($file, $extensions)) {
         return array($file, $base);
       }
     }
